@@ -171,80 +171,84 @@ module.exports = options => {
         /** index of the tbody beginning */
         let idx = i - 2;
         while (idx > 0 && 'tbody_open' !== tokens[--idx].type);
+          try{
+            const calc = tokens[idx].meta.colsnum >> 0;
+            if (calc < 2) { return; }
 
-        const calc = tokens[idx].meta.colsnum >> 0;
-        if (calc < 2) { return; }
+            const level = tokens[i].level + 2;
+            for (let n = idx; n < i; n++) {
+              if (tokens[n].level > level) { continue; }
 
-        const level = tokens[i].level + 2;
-        for (let n = idx; n < i; n++) {
-          if (tokens[n].level > level) { continue; }
+              const token = tokens[n];
+              const rows = token.hidden ? 0 : token.attrGet('rowspan') >> 0;
+              const cols = token.hidden ? 0 : token.attrGet('colspan') >> 0;
 
-          const token = tokens[n];
-          const rows = token.hidden ? 0 : token.attrGet('rowspan') >> 0;
-          const cols = token.hidden ? 0 : token.attrGet('colspan') >> 0;
-
-          if (rows > 1) {
-            let colsnum = calc - (cols > 0 ? cols : 1);
-            for (let k = n, num = rows; k < i, num > 1; k++) {
-              if ('tr_open' == tokens[k].type) {
-                tokens[k].meta = Object.assign({}, tokens[k].meta);
-                if (tokens[k].meta && tokens[k].meta.colsnum) {
-                  colsnum -= 1;
+              if (rows > 1) {
+                let colsnum = calc - (cols > 0 ? cols : 1);
+                for (let k = n, num = rows; k < i, num > 1; k++) {
+                  if ('tr_open' == tokens[k].type) {
+                    tokens[k].meta = Object.assign({}, tokens[k].meta);
+                    if (tokens[k].meta && tokens[k].meta.colsnum) {
+                      colsnum -= 1;
+                    }
+                    tokens[k].meta.colsnum = colsnum;
+                    num--;
+                  }
                 }
-                tokens[k].meta.colsnum = colsnum;
-                num--;
+              }
+
+              if ('tr_open' == token.type && token.meta && token.meta.colsnum) {
+                const max = token.meta.colsnum;
+                for (let k = n, num = 0; k < i; k++) {
+                  if ('td_open' == tokens[k].type) {
+                    num += 1;
+                  } else if ('tr_close' == tokens[k].type) {
+                    break;
+                  }
+                  num > max && (tokens[k].hidden || hidden(tokens[k]));
+                }
+              }
+
+              if (cols > 1) {
+                /** @type {number[]} index of one row's children */
+                const one = [];
+                /** last index of the row's children */
+                let end = n + 3;
+                /** number of the row's children */
+                let num = calc;
+
+                for (let k = n; k > idx; k--) {
+                  if ('tr_open' == tokens[k].type) {
+                    num = tokens[k].meta && tokens[k].meta.colsnum || num;
+                    break;
+                  } else if ('td_open' === tokens[k].type) {
+                    one.unshift(k);
+                  }
+                }
+
+                for (let k = n + 2; k < i; k++) {
+                  if ('tr_close' == tokens[k].type) {
+                    end = k;
+                    break;
+                  } else if ('td_open' == tokens[k].type) {
+                    one.push(k);
+                  }
+                }
+
+                const off = one.indexOf(n);
+                let real = num - off;
+                real = real > cols ? cols : real;
+                cols > real && token.attrSet('colspan', real + '');
+
+                for (let k = one.slice(num + 1 - calc - real)[0]; k < end; k++) {
+                  tokens[k].hidden || hidden(tokens[k]);
+                }
               }
             }
+          }catch(e){
+            console.log(id,tokens);
           }
 
-          if ('tr_open' == token.type && token.meta && token.meta.colsnum) {
-            const max = token.meta.colsnum;
-            for (let k = n, num = 0; k < i; k++) {
-              if ('td_open' == tokens[k].type) {
-                num += 1;
-              } else if ('tr_close' == tokens[k].type) {
-                break;
-              }
-              num > max && (tokens[k].hidden || hidden(tokens[k]));
-            }
-          }
-
-          if (cols > 1) {
-            /** @type {number[]} index of one row's children */
-            const one = [];
-            /** last index of the row's children */
-            let end = n + 3;
-            /** number of the row's children */
-            let num = calc;
-
-            for (let k = n; k > idx; k--) {
-              if ('tr_open' == tokens[k].type) {
-                num = tokens[k].meta && tokens[k].meta.colsnum || num;
-                break;
-              } else if ('td_open' === tokens[k].type) {
-                one.unshift(k);
-              }
-            }
-
-            for (let k = n + 2; k < i; k++) {
-              if ('tr_close' == tokens[k].type) {
-                end = k;
-                break;
-              } else if ('td_open' == tokens[k].type) {
-                one.push(k);
-              }
-            }
-
-            const off = one.indexOf(n);
-            let real = num - off;
-            real = real > cols ? cols : real;
-            cols > real && token.attrSet('colspan', real + '');
-
-            for (let k = one.slice(num + 1 - calc - real)[0]; k < end; k++) {
-              tokens[k].hidden || hidden(tokens[k]);
-            }
-          }
-        }
       }
     }, {
       /**
